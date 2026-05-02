@@ -6,152 +6,166 @@ import matplotlib.pyplot as plt
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Finance AI Dashboard",
-    page_icon="📊",
+    page_title="Mordor Finance Terminal",
+    page_icon="🔥",
     layout="wide"
 )
 
-# ---------------- HEADER ----------------
+# ---------------- MORDOR DARK THEME ----------------
 st.markdown(
     """
-    <h1 style='text-align: center;'>📊 Finance AI Dashboard</h1>
-    <p style='text-align: center; font-size:18px;'>
-    Educational finance analysis using historical data & AI-style insights
-    </p>
+    <style>
+    body {
+        background-color: #0b0b0b;
+        color: #e6e6e6;
+    }
+
+    .stApp {
+        background-color: #0b0b0b;
+    }
+
+    h1, h2, h3 {
+        color: #ff3b30;
+    }
+
+    .card {
+        background: linear-gradient(135deg, #1a1a1a, #0d0d0d);
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid #2a2a2a;
+        box-shadow: 0px 0px 10px rgba(255, 0, 0, 0.15);
+    }
+    </style>
     """,
     unsafe_allow_html=True
 )
 
-# ---------------- INPUTS ----------------
-symbols_input = st.text_input(
-    "Enter stock or crypto symbols (comma separated)",
-    "AAPL, ETH-USD"
-)
+# ---------------- HEADER ----------------
+st.markdown("<h1 style='text-align:center;'>🔥 MORDOR FINANCE TERMINAL</h1>", unsafe_allow_html=True)
+st.caption("Dark-mode financial intelligence dashboard (educational)")
 
-history_period = st.selectbox(
-    "Select historical period",
-    ["7d", "30d", "3mo", "6mo", "1y"],
-    index=1
-)
+# ---------------- SIDEBAR ----------------
+st.sidebar.header("Control Panel")
 
-analyze_btn = st.button("🚀 Analyze")
+symbols_input = st.sidebar.text_input("Enter symbols", "AAPL, TSLA")
+period = st.sidebar.selectbox("Time Period", ["7d", "30d", "3mo", "6mo", "1y"], index=1)
+run = st.sidebar.button("⚡ Analyze")
 
-# ---------------- FUNCTIONS ----------------
+# ---------------- COMPANY INFO ----------------
+def get_company_info(symbol):
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+
+        return {
+            "name": info.get("longName", symbol),
+            "sector": info.get("sector", "Unknown"),
+            "industry": info.get("industry", "Unknown"),
+            "market_cap": info.get("marketCap", "N/A"),
+            "country": info.get("country", "N/A"),
+            "website": info.get("website", "N/A")
+        }
+    except:
+        return {
+            "name": symbol,
+            "sector": "Unknown",
+            "industry": "Unknown",
+            "market_cap": "N/A",
+            "country": "N/A",
+            "website": "N/A"
+        }
+
+# ---------------- NEWS SENTIMENT ----------------
 def get_news_sentiment(symbol):
-    """Simple sentiment using Google News RSS"""
-    feed_url = f"https://news.google.com/rss/search?q={symbol}+stock"
-    feed = feedparser.parse(feed_url)
+    feed = feedparser.parse(f"https://news.google.com/rss/search?q={symbol}+stock")
 
     if not feed.entries:
-        return "No recent news found."
+        return "No news data"
 
-    positive_words = ["rise", "gain", "up", "growth", "profit", "strong"]
-    negative_words = ["fall", "drop", "down", "loss", "weak", "decline"]
+    pos = ["rise", "gain", "up", "strong", "profit"]
+    neg = ["fall", "drop", "down", "loss", "weak"]
 
     score = 0
-    for entry in feed.entries[:5]:
-        title = entry.title.lower()
-        for w in positive_words:
+    for e in feed.entries[:5]:
+        title = e.title.lower()
+        for w in pos:
             if w in title:
                 score += 1
-        for w in negative_words:
+        for w in neg:
             if w in title:
                 score -= 1
 
     if score > 0:
-        return "🟢 News sentiment looks POSITIVE"
+        return "🟢 Positive News Sentiment"
     elif score < 0:
-        return "🔴 News sentiment looks NEGATIVE"
-    else:
-        return "🟡 News sentiment is NEUTRAL"
+        return "🔴 Negative News Sentiment"
+    return "🟡 Neutral Sentiment"
 
-# ---------------- MAIN LOGIC ----------------
-if analyze_btn:
+# ---------------- MAIN APP ----------------
+if run:
     symbols = [s.strip().upper() for s in symbols_input.split(",")]
 
     for symbol in symbols:
         st.divider()
-        st.subheader(f"📌 {symbol}")
 
-        asset = yf.Ticker(symbol)
-        data = asset.history(period=history_period)
+        data = yf.Ticker(symbol).history(period=period)
 
         if data.empty:
-            st.error("No data available")
+            st.error(f"No data for {symbol}")
             continue
 
-        # ---------------- CALCULATIONS ----------------
+        # ---------------- COMPANY INFO ----------------
+        info = get_company_info(symbol)
+
+        start = data["Close"].iloc[0]
+        end = data["Close"].iloc[-1]
+        change_pct = ((end - start) / start) * 100
+
+        # ---------------- INFO CARD ----------------
+        st.markdown(f"""
+        <div class="card">
+            <h2>🏢 {info['name']} ({symbol})</h2>
+            <p><b>Sector:</b> {info['sector']}</p>
+            <p><b>Industry:</b> {info['industry']}</p>
+            <p><b>Country:</b> {info['country']}</p>
+            <p><b>Market Cap:</b> {info['market_cap']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ---------------- METRICS ----------------
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Start", round(start, 2))
+        col2.metric("End", round(end, 2))
+        col3.metric("Change %", round(change_pct, 2))
+
+        # ---------------- CHARTS ----------------
+        colA, colB = st.columns(2)
+
+        with colA:
+            st.markdown("### 📈 Price Chart")
+            st.line_chart(data["Close"])
+
+        with colB:
+            st.markdown("### 📊 Volume")
+            st.bar_chart(data["Volume"])
+
+        # ---------------- MOVING AVERAGES ----------------
         data["MA20"] = data["Close"].rolling(20).mean()
         data["MA50"] = data["Close"].rolling(50).mean()
 
-        start_price = data["Close"].iloc[0]
-        end_price = data["Close"].iloc[-1]
-        change_pct = ((end_price - start_price) / start_price) * 100
+        st.markdown("### 📉 Trend Analysis (MA20 / MA50)")
+        st.line_chart(data[["Close", "MA20", "MA50"]])
 
-        # ---------------- LAYOUT ----------------
-        col1, col2 = st.columns([2, 1])
-
-        # ---------------- PRICE + MA CHART ----------------
-        with col1:
-            fig, ax = plt.subplots()
-            ax.plot(data.index, data["Close"], label="Close Price")
-            ax.plot(data.index, data["MA20"], label="MA20")
-            ax.plot(data.index, data["MA50"], label="MA50")
-            ax.set_title("Price with Moving Averages")
-            ax.legend()
-            st.pyplot(fig)
-
-        # ---------------- VOLUME CHART ----------------
-        with col2:
-            fig2, ax2 = plt.subplots()
-            ax2.bar(data.index, data["Volume"])
-            ax2.set_title("Volume")
-            st.pyplot(fig2)
-
-        # ---------------- SUMMARY ----------------
-        st.markdown("### 📊 Summary")
-        st.write(f"Start Price: **{round(start_price,2)}**")
-        st.write(f"End Price: **{round(end_price,2)}**")
-        st.write(f"Change: **{round(change_pct,2)}%**")
-
-        # ---------------- AI EXPLANATION ----------------
-        st.markdown("### 🤖 AI Explanation (Educational)")
-        if change_pct > 0:
-            st.success(
-                "The price increased over this period, showing an overall upward trend. "
-                "This suggests buyers were stronger than sellers."
-            )
-        elif change_pct < 0:
-            st.error(
-                "The price decreased over this period, indicating selling pressure. "
-                "This suggests weaker market confidence."
-            )
-        else:
-            st.info(
-                "The price stayed mostly stable, indicating a balanced market."
-            )
-
-        # ---------------- NEWS SENTIMENT ----------------
+        # ---------------- NEWS ----------------
         st.markdown("### 📰 News Sentiment")
         st.write(get_news_sentiment(symbol))
 
-        # ---------------- DOWNLOAD DATA ----------------
-        st.markdown("### ⬇️ Download Data")
-        csv = data.to_csv().encode("utf-8")
-        st.download_button(
-            label="Download historical data as CSV",
-            data=csv,
-            file_name=f"{symbol}_history.csv",
-            mime="text/csv"
-        )
+        # ---------------- INFO GRAPHIC SUMMARY ----------------
+        st.markdown("### 🔥 Summary Insight")
 
-# ---------------- FOOTER ----------------
-st.markdown(
-    """
-    <hr>
-    <p style='text-align:center; font-size:14px;'>
-    ⚠️ This app is for learning purposes only. Not financial advice.
-    </p>
-    """,
-    unsafe_allow_html=True
-)
+        if change_pct > 0:
+            st.success("Uptrend detected — buyers dominating the market.")
+        else:
+            st.error("Downtrend detected — selling pressure stronger.")
+
+        st.caption("⚠ Educational analysis only, not financial advice.")
